@@ -1,5 +1,9 @@
+// ignore_for_file: must_be_immutable
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'package:newsapp/model/show_category.dart';
 import 'package:newsapp/pages/article_view.dart';
 import 'package:newsapp/services/layout.dart';
@@ -7,7 +11,7 @@ import 'package:newsapp/services/show_category_news.dart';
 
 class CategoryNews extends StatefulWidget {
   String name;
-  CategoryNews({required this.name});
+  CategoryNews({super.key, required this.name});
 
   @override
   State<CategoryNews> createState() => _CategoryNewsState();
@@ -26,8 +30,7 @@ class _CategoryNewsState extends State<CategoryNews> {
     ShowCategoryNews showCategoryNews = ShowCategoryNews();
     await showCategoryNews.getCategoriesNews(widget.name.toLowerCase());
     categories = showCategoryNews.categories;
-    setState(() {
-    });
+    setState(() {});
   }
 
   @override
@@ -36,23 +39,23 @@ class _CategoryNewsState extends State<CategoryNews> {
         appBar: AppBar(
           title: Text(
             widget.name,
-            style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
           ),
           centerTitle: true,
           elevation: 0.0,
         ),
         body: Container(
-          margin: EdgeInsets.symmetric(horizontal: 10.0),
+          margin: const EdgeInsets.symmetric(horizontal: 10.0),
           child: ListView.builder(
               shrinkWrap: true,
-              physics: ClampingScrollPhysics(),
+              physics: const ClampingScrollPhysics(),
               itemCount: categories.length,
               itemBuilder: (context, index) {
                 return ShowCategory(
-                  Image: categories[index].urlToImage!,
-                  title: categories[index].title!,
-                  url: categories[index].url!,
-                  publishedAt: categories[index].publishedAt!,
+                  image: categories[index].urlToImage,
+                  title: categories[index].title,
+                  url: categories[index].url,
+                  publishedAt: categories[index].publishedAt,
                 );
               }),
         ));
@@ -60,9 +63,9 @@ class _CategoryNewsState extends State<CategoryNews> {
 }
 
 class ShowCategory extends StatelessWidget {
-  String Image, title, url, publishedAt;
+  String image, title, url, publishedAt;
   ShowCategory(
-      {required this.Image,
+      {super.key, required this.image,
       required this.title,
       required this.url,
       required this.publishedAt});
@@ -71,8 +74,7 @@ class ShowCategory extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (context) => ArticleView(blogUrl: url)));
+        Get.to(ArticleView(blogUrl: url));
       },
       child: Padding(
         padding: const EdgeInsets.all(8.0),
@@ -84,22 +86,22 @@ class ShowCategory extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: CachedNetworkImage(
-                  imageUrl: Image,
+                  imageUrl: image,
                   width: MediaQuery.of(context).size.width,
                   height: 200,
                   fit: BoxFit.cover,
                 ),
               ),
-              SizedBox(
+              const SizedBox(
                 height: 5.0,
               ),
               Text(
                 title,
                 maxLines: 2,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
               ),
-              SizedBox(
+              const SizedBox(
                 height: 20.0,
               ),
               Padding(
@@ -108,14 +110,15 @@ class ShowCategory extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Layout.iconText(
-                        Icon(Icons.timer_outlined),
+                        const Icon(Icons.timer_outlined),
                         Text(
-                          publishedAt,
-                          style: TextStyle(fontSize: 15.0),
+                          DateFormat.yMd().add_jm().format(
+                              DateTime.tryParse(publishedAt) ?? DateTime.now()),
+                          style: const TextStyle(fontSize: 15.0),
                         )),
                     GestureDetector(
                       onTap: () {},
-                      child: Icon(Icons.bookmark_border),
+                      child: const Icon(Icons.bookmark_border),
                     )
                   ],
                 ),

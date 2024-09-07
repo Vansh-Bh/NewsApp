@@ -5,7 +5,7 @@ class ArticleModel {
   late String url;
   String? urlToImage;
   String? content;
-  String? publishedAt;
+  late String publishedAt;
 
   ArticleModel(
       {this.author,
@@ -14,5 +14,25 @@ class ArticleModel {
       this.title,
       required this.url,
       this.urlToImage,
-      this.publishedAt});
+      required this.publishedAt});
+
+  factory ArticleModel.fromJson(Map<String, dynamic> json) {
+    return ArticleModel(
+      url: json['url'],
+      title: json['title'],
+      description: json['description'],
+      urlToImage: json['image'],
+      publishedAt: json['publishedAt'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'url': url,
+      'title': title,
+      'description': description,
+      'image': urlToImage,
+      'publishedAt': publishedAt,
+    };
+  }
 }

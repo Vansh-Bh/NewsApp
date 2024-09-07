@@ -1,13 +1,17 @@
+// ignore_for_file: library_private_types_in_public_api
+
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:newsapp/model/article_model.dart';
 import 'package:newsapp/services/layout.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Bookmark extends StatefulWidget {
-  final List<String> bookmarkedArticleIds;
-  final List<ArticleModel> allArticles;
+  final List<ArticleModel> bookmarkedArticles;
 
-  Bookmark({required this.bookmarkedArticleIds, required this.allArticles});
+  const Bookmark({super.key, required this.bookmarkedArticles});
 
   @override
   _BookmarkState createState() => _BookmarkState();
@@ -16,25 +20,28 @@ class Bookmark extends StatefulWidget {
 class _BookmarkState extends State<Bookmark> {
   @override
   Widget build(BuildContext context) {
-    List<ArticleModel> bookmarkedArticles = widget.allArticles
-        .where((article) => widget.bookmarkedArticleIds.contains(article.url))
-        .toList();
-
     return Scaffold(
       appBar: AppBar(
-        title: Text('Bookmarked Articles'),
+        title: Text(
+          'Bookmarks',
+          style:
+              TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[600]),
+        ),
       ),
-      body: bookmarkedArticles.isEmpty
-          ? Center(
+      body: widget.bookmarkedArticles.isEmpty
+          ? const Center(
               child: Text('No Bookmarked Articles'),
             )
           : ListView.builder(
-              itemCount: bookmarkedArticles.length,
+              itemCount: widget.bookmarkedArticles.length,
               itemBuilder: (context, index) {
                 return BlogTile(
-                  article: bookmarkedArticles[index],
+                  article: widget.bookmarkedArticles[index],
                   onBookmark: () {
-                    _toggleBookmark(bookmarkedArticles[index].url);
+                    setState(() {
+                      widget.bookmarkedArticles.removeAt(index);
+                      _saveBookmarkedArticles();
+                    });
                   },
                 );
               },
@@ -42,23 +49,21 @@ class _BookmarkState extends State<Bookmark> {
     );
   }
 
-  void _toggleBookmark(String articleUrl) {
-    setState(() {
-      if (widget.bookmarkedArticleIds.contains(articleUrl)) {
-        widget.bookmarkedArticleIds.remove(articleUrl);
-      } else {
-        widget.bookmarkedArticleIds.add(articleUrl);
-      }
-      // Save updated bookmarkedArticleIds to storage if necessary
-    });
+  void _saveBookmarkedArticles() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> jsonList = widget.bookmarkedArticles
+        .map((article) => jsonEncode(article.toJson()))
+        .toList();
+    await prefs.setString('bookmarked_articles', jsonEncode(jsonList));
   }
 }
+
 
 class BlogTile extends StatelessWidget {
   final ArticleModel article;
   final VoidCallback onBookmark;
 
-  BlogTile({required this.article, required this.onBookmark});
+  const BlogTile({super.key, required this.article, required this.onBookmark});
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +75,7 @@ class BlogTile extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
+          children: [
             Stack(
               children: [
                 ClipRRect(
@@ -81,15 +86,16 @@ class BlogTile extends StatelessWidget {
                   child: CachedNetworkImage(
                     imageUrl: article.urlToImage ??
                         'https://user-images.githubusercontent.com/24848110/33519396-7e56363c-d79d-11e7-969b-09782f5ccbab.png',
-                    placeholder: (context, url) => CircularProgressIndicator(),
-                    errorWidget: (context, url, error) => Icon(Icons.error),
+                    placeholder: (context, url) =>
+                        const CircularProgressIndicator(),
+                    errorWidget: (context, url, error) => const Icon(Icons.error),
                     alignment: Alignment.center,
                   ),
                 ),
               ],
             ),
             Padding(
-              padding: EdgeInsets.all(15.0),
+              padding: const EdgeInsets.all(15.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -97,12 +103,12 @@ class BlogTile extends StatelessWidget {
                   Text(
                     article.title ?? 'No Title Available',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 20.0,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(
+                  const SizedBox(
                     height: 16.0,
                     width: 16.0,
                   ),
@@ -110,16 +116,16 @@ class BlogTile extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Layout.iconText(
-                          Icon(Icons.timer_outlined),
+                          const Icon(Icons.timer_outlined),
                           Text(
-                            article.publishedAt ?? '',
-                            style: TextStyle(
+                            article.publishedAt,
+                            style: const TextStyle(
                               fontSize: 15.0,
                             ),
                           )),
                       IconButton(
                         onPressed: onBookmark,
-                        icon: Icon(
+                        icon: const Icon(
                           Icons.bookmark,
                           color: Colors.blue,
                         ),

@@ -1,16 +1,17 @@
-import 'dart:convert';
-
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:newsapp/model/article_model.dart';
 import 'package:newsapp/model/category_model.dart';
-import 'package:newsapp/pages/article_view.dart';
 import 'package:newsapp/pages/bookmark.dart';
-import 'package:newsapp/pages/category_news.dart';
-import 'package:http/http.dart' as http;
-import 'package:newsapp/services/layout.dart';
 import 'package:newsapp/services/theme_changer.dart';
+import 'package:newsapp/widgets/catefory_tile.dart';
+import 'package:newsapp/widgets/news_tile.dart';
+import 'package:http/http.dart' as http;
+import 'package:newsapp/widgets/search.dart';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:get/get.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -29,77 +30,126 @@ class _HomeState extends State<Home> {
   ];
 
   List<ArticleModel> articles = [];
-  List<String> bookmarkedArticleIds = [];
+  List<ArticleModel> bookmarkedArticles = [];
 
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _loadBookmarkedArticles();
     fetchData();
-    _loadBookmarkedArticleIds();
   }
 
   Future<void> fetchData() async {
-    // Replace with your News API key
+    String? apiKey = dotenv.env["API_KEY"];
     final apiUrl =
-        'http://newsapi.org/v2/top-headlines?country=in&apiKey=54145bc9681c42de9a6cc831aa90502b';
+        'https://gnews.io/api/v4/top-headlines?lang=en&country=in&max=10&apikey=$apiKey';
 
-    final response = await http.get(Uri.parse(apiUrl));
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
 
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-
-      if (data['status'] == 'ok') {
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
         setState(() {
           articles = (data['articles'] as List)
               .map((article) => ArticleModel(
                     url: article['url'],
                     title: article['title'],
                     description: article['description'],
-                    urlToImage: article['urlToImage'],
+                    urlToImage: article['image'],
                     publishedAt: article['publishedAt'],
                   ))
               .toList();
           _loading = false;
         });
+        await cacheData('newsData', data['articles']);
+        print('Data fetched from API and cached successfully.');
       } else {
-        print('API Error: ${data['message']}');
+        print('HTTP Error: ${response.statusCode}');
       }
-    } else {
-      print('HTTP Error: ${response.statusCode}');
+    } catch (e) {
+      print('Error fetching data from API: $e');
+      final cachedData = await getCachedData('newsData');
+      if (cachedData != null) {
+        setState(() {
+          articles = (cachedData as List)
+              .map((article) => ArticleModel(
+                    url: article['url'],
+                    title: article['title'],
+                    description: article['description'],
+                    urlToImage: article['image'],
+                    publishedAt: article['publishedAt'],
+                  ))
+              .toList();
+          _loading = false;
+        });
+        print('Loaded cached data successfully.');
+      } else {
+        print('No cached data available.');
+      }
     }
   }
 
-  _loadBookmarkedArticleIds() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      bookmarkedArticleIds =
-          prefs.getStringList('bookmarked_article_ids') ?? [];
-    });
+  Future<void> cacheData(String key, dynamic data) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonData = jsonEncode(data);
+    await prefs.setString(key, jsonData);
+    print('Data cached with key: $key');
   }
 
-  _saveBookmarkedArticleIds() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setStringList('bookmarked_article_ids', bookmarkedArticleIds);
+  Future<dynamic> getCachedData(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonData = prefs.getString(key);
+    if (jsonData != null) {
+      print('Data retrieved from cache with key: $key');
+      return jsonDecode(jsonData);
+    }
+    print('No data found in cache with key: $key');
+    return null;
   }
 
-  _toggleBookmark(String articleUrl) {
+  Future<void> _loadBookmarkedArticles() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? bookmarkedArticlesJson = prefs.getString('bookmarked_articles');
+    if (bookmarkedArticlesJson != null) {
+      List<dynamic> jsonList = jsonDecode(bookmarkedArticlesJson);
+      setState(() {
+        bookmarkedArticles = jsonList
+            .map(
+                (jsonArticle) => ArticleModel.fromJson(jsonDecode(jsonArticle)))
+            .toList();
+      });
+    }
+  }
+
+  Future<void> _saveBookmarkedArticles() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> jsonList = bookmarkedArticles
+        .map((article) => jsonEncode(article.toJson()))
+        .toList();
+    await prefs.setString('bookmarked_articles', jsonEncode(jsonList));
+  }
+
+  void _toggleBookmark(String url) {
     setState(() {
-      if (bookmarkedArticleIds.contains(articleUrl)) {
-        bookmarkedArticleIds.remove(articleUrl);
+      final index = bookmarkedArticles.indexWhere((a) => a.url == url);
+      if (index != -1) {
+        bookmarkedArticles.removeAt(index);
       } else {
-        bookmarkedArticleIds.add(articleUrl);
+        final article = articles.firstWhere((a) => a.url == url);
+        bookmarkedArticles.add(article);
       }
-      _saveBookmarkedArticleIds();
+      _saveBookmarkedArticles();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeService = Get.find<ThemeService>();
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
             Text(
@@ -117,29 +167,45 @@ class _HomeState extends State<Home> {
           IconButton(
             icon: Icon(Icons.bookmark),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => Bookmark(
-                    bookmarkedArticleIds: bookmarkedArticleIds,
-                    allArticles: articles,
-                  ),
+              Get.to(
+                Bookmark(
+                  bookmarkedArticles: bookmarkedArticles,
                 ),
               );
             },
           ),
-          ChangeThemeButton()
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: DataSearch(
+                  articles,
+                  bookmarkedArticles.map((article) => article.url).toList(),
+                  _toggleBookmark,
+                ),
+              );
+            },
+          ),
+          Obx(() => IconButton(
+                icon: Icon(themeService.isDarkMode.value
+                    ? Icons.light_mode
+                    : Icons.dark_mode),
+                onPressed: () {
+                  themeService.switchTheme();
+                },
+              )),
         ],
       ),
       body: _loading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               child: Card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      margin: EdgeInsets.only(left: 10.0),
+                      margin: const EdgeInsets.only(left: 10.0),
                       height: 40,
                       child: ListView.builder(
                           shrinkWrap: true,
@@ -151,11 +217,11 @@ class _HomeState extends State<Home> {
                             );
                           }),
                     ),
-                    SizedBox(
+                    const SizedBox(
                       height: 30.0,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 10.0, right: 10.0),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 10.0, right: 10.0),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -169,187 +235,27 @@ class _HomeState extends State<Home> {
                         ],
                       ),
                     ),
-                    SizedBox(
+                    const SizedBox(
                       height: 10.0,
                     ),
-                    Container(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        physics: ClampingScrollPhysics(),
-                        itemCount: articles.length,
-                        itemBuilder: (context, index) {
-                          return BlogTile(
-                            article: articles[index],
-                            isBookmarked: bookmarkedArticleIds
-                                .contains(articles[index].url),
-                            onBookmark: () =>
-                                _toggleBookmark(articles[index].url),
-                          );
-                        },
-                      ),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const ClampingScrollPhysics(),
+                      itemCount: articles.length,
+                      itemBuilder: (context, index) {
+                        return NewsTiles(
+                          article: articles[index],
+                          isBookmarked: bookmarkedArticles
+                              .any((a) => a.url == articles[index].url),
+                          onBookmark: () =>
+                              _toggleBookmark(articles[index].url),
+                        );
+                      },
                     )
                   ],
                 ),
               ),
             ),
     );
-  }
-}
-
-class CategoryTile extends StatelessWidget {
-  final image, categoryName;
-  CategoryTile({this.categoryName, this.image});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (context) => CategoryNews(name: categoryName)));
-      },
-      child: Container(
-        margin: EdgeInsets.only(right: 16),
-        child: Stack(
-          children: [
-            Container(
-              width: 120,
-              height: 70,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                color: Colors.blue[600],
-              ),
-              child: Center(
-                  child: Text(
-                categoryName,
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold),
-              )),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class BlogTile extends StatelessWidget {
-  final ArticleModel article;
-  final bool isBookmarked;
-  final VoidCallback onBookmark;
-
-  BlogTile({
-    required this.article,
-    required this.isBookmarked,
-    required this.onBookmark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ArticleView(blogUrl: article.url),
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Card(
-          surfaceTintColor: Colors.white30,
-          elevation: 8,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16.0),
-                      topRight: Radius.circular(16.0),
-                    ),
-                    child: CachedNetworkImage(
-                      imageUrl: article.urlToImage ??
-                          'https://user-images.githubusercontent.com/24848110/33519396-7e56363c-d79d-11e7-969b-09782f5ccbab.png',
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: EdgeInsets.all(15.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      article.title ?? 'No Title Available',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20.0,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(
-                      height: 16.0,
-                      width: 16.0,
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Layout.iconText(
-                            Icon(Icons.timer_outlined),
-                            Text(
-                              article.publishedAt ?? '',
-                              style: TextStyle(
-                                fontSize: 15.0,
-                              ),
-                            )),
-                        IconButton(
-                          onPressed: onBookmark,
-                          icon: Icon(
-                            isBookmarked
-                                ? Icons.bookmark
-                                : Icons.bookmark_border,
-                          ),
-                        ),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class MyAppThemes {
-  static final lightTheme = ThemeData(
-    scaffoldBackgroundColor: Colors.white,
-    colorScheme: ColorScheme.light(),
-  );
-
-  static final darkTheme = ThemeData(
-    scaffoldBackgroundColor: Colors.black,
-    colorScheme: ColorScheme.dark(),
-  );
-}
-
-class ThemeProvider extends ChangeNotifier {
-  ThemeMode themeMode = ThemeMode.dark;
-
-  bool get isDarkMode => themeMode == ThemeMode.dark;
-
-  void toggleTheme(bool isOn) {
-    themeMode = isOn ? ThemeMode.dark : ThemeMode.light;
-    notifyListeners();
   }
 }
